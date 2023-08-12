@@ -55,7 +55,7 @@ window.onload = async _ => {
 	}
 
 	function ParseObj(objString) {
-		const vertexes = [];
+		const vertices = [];
 		const normals = [];
 		const faces = [];
 		const textureCoordinates = [];
@@ -63,7 +63,7 @@ window.onload = async _ => {
 			const tokens = line.split(' ').filter(token => token.length > 0)
 			switch (tokens[0]) {
 				case 'v':
-					vertexes.push(tokens.slice(1).map(parseFloat));
+					vertices.push(tokens.slice(1).map(parseFloat));
 					break;
 				case 'f':
 					faces.push(tokens.slice(1).map(token =>({
@@ -77,7 +77,7 @@ window.onload = async _ => {
 				case 'vn': normals.push(tokens.slice(1).map(parseFloat));
 			}
 		}
-		return { vertexes, faces, textureCoordinates, normals }
+		return { vertices, faces, textureCoordinates, normals }
 	}
 
 	function CreateModelMatrix() {
@@ -128,7 +128,7 @@ window.onload = async _ => {
 		]
 	}
 
-	function RenderModel(vertexes, faces, textureCoordinates, normals, textureData, lightDirection) {
+	function RenderModel(vertices, faces, textureCoordinates, normals, textureData, lightDirection) {
 		const minSize = Math.min(canvas.width, canvas.height);
 		const modelViewMatrix =
 			multiplyMatrices(CreateModelMatrix(), CreateViewMatrix([0, 0, 2], [0, 0, 1], [0, 1, 0]));
@@ -137,7 +137,7 @@ window.onload = async _ => {
 			CreateProjectionMatrix(-0.2),
 			CreateViewPortMatrix(0, 0, minSize, minSize))
 		const inverse = CreateInversMatrix(modelViewMatrix);
-		const transformedVertexes = vertexes.map(vertex => Project4dTo3d_Mutator(multiplyMatrices([[...vertex, 1]], matrix)[0]));
+		const transformedVertices = vertices.map(vertex => Project4dTo3d_Mutator(multiplyMatrices([[...vertex, 1]], matrix)[0]));
 		const transformedNormals = normals.map(normal => (multiplyMatrices([[...normal, 0]], inverse)[0]).slice(0, -1));
 		const zBuffer = Array.from({length: canvas.width},
 			() => Array.from({length: canvas.height}, () => Number.NEGATIVE_INFINITY));
@@ -145,7 +145,7 @@ window.onload = async _ => {
 		for (let faceData of faces)
 		{
 			const face = faceData.map(vertexData => ({
-				coordinates: transformedVertexes[vertexData.vertexIndex],
+				coordinates: transformedVertices[vertexData.vertexIndex],
 				textureCoordinates: textureCoordinates[vertexData.textureCoordinatesIndex],
 				normal: transformedNormals[vertexData.vertexIndex]
 			}));
@@ -214,7 +214,7 @@ window.onload = async _ => {
 	const response = await fetch(
 		'https://raw.githubusercontent.com/ssloy/tinyrenderer/f6fecb7ad493264ecd15e230411bfb1cca539a12/obj/african_head.obj'
 	)
-	const { vertexes, faces, textureCoordinates,  normals } = ParseObj(await response.text());
+	const { vertices, faces, textureCoordinates,  normals } = ParseObj(await response.text());
 	const image = new Image();
 	image.crossorigin="anonymous";
 	await new Promise(resolve => image.onload = resolve, image.src = 'african_head_diffuse.png');
@@ -225,7 +225,7 @@ window.onload = async _ => {
 	textureCtx.drawImage(image, 0, 0);
 	const textureData = textureCtx.getImageData(0, 0, textureCanvas.width, textureCanvas.height);
 	console.time("Rendering");
-	RenderModel(vertexes, faces, textureCoordinates, normals, textureData, [1, 0, 0]);
+	RenderModel(vertices, faces, textureCoordinates, normals, textureData, [1, 0, 0]);
 	console.timeEnd("Rendering");
 	ctx.putImageData(imageData, 0, 0);
 }
