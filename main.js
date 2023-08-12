@@ -13,9 +13,6 @@ window.onload = async _ => {
 
 	function RenderTriangle_Box(putPixel, a, b, c, zBuffer, textureData, lightDirection)
 	{
-		Project(a.coordinates);
-		Project(b.coordinates);
-		Project(c.coordinates);
 		const yMin = Math.max(0, Math.round(Math.min(a.coordinates[1], b.coordinates[1], c.coordinates[1])));
 		const xMin = Math.max(0, Math.round(Math.min(a.coordinates[0], b.coordinates[0], c.coordinates[0])));
 		const yMax = Math.min(Math.round(Math.max(a.coordinates[1], b.coordinates[1], c.coordinates[1])), imageData.height - 1);
@@ -23,7 +20,7 @@ window.onload = async _ => {
 		for (let y = yMin; y <=  yMax; y++)
 			for (let x = xMin; x <=  xMax; x++)
 			{
-				const barycentricScreen = cartesianToBarycentric([x, y], a.coordinates, b.coordinates, c.coordinates);
+				const barycentricScreen = cartesianToBarycentric3d([x, y], a.coordinates, b.coordinates, c.coordinates);
 				if (barycentricScreen.every(x => x >= 0)) {
 					const preBarycentricClip = [
 						barycentricScreen[0] / (a.coordinates[3]),
@@ -50,10 +47,11 @@ window.onload = async _ => {
 			}
 	}
 	
-	function Project(a) {
+	function Project4dTo3d_Mutator(a) {
 		a[0] /= a[3];
 		a[1] /= a[3];
 		a[2] /= a[3];
+		return a;
 	}
 
 	function ParseObj(objString) {
@@ -93,8 +91,8 @@ window.onload = async _ => {
 
 	function CreateViewMatrix(eye, center, up) {
 		const z = normalizeVector(pointsToVector(center, eye));
-		const x = normalizeVector(crossProduct(up, z));
-		const y = normalizeVector(crossProduct(z, x));
+		const x = normalizeVector(crossProduct3d(up, z));
+		const y = normalizeVector(crossProduct3d(z, x));
 		const rotation = [
 			[x[0], y[0], z[0], 0],
 			[x[1], y[1], z[1], 0],
@@ -139,25 +137,22 @@ window.onload = async _ => {
 			CreateProjectionMatrix(-0.2),
 			CreateViewPortMatrix(0, 0, minSize, minSize))
 		const inverse = CreateInversMatrix(modelViewMatrix);
-		const transform = (vertex) => ({
-			coordinates: multiplyMatrices([[...vertex.coordinates, 1]], matrix)[0],
-			textureCoordinates: vertex.textureCoordinates,
-			normal:  (multiplyMatrices([[...vertex.normal, 0]], inverse)[0]).slice(0, -1),
-		});
+		const transformedVertexes = vertexes.map(vertex => Project4dTo3d_Mutator(multiplyMatrices([[...vertex, 1]], matrix)[0]));
+		const transformedNormals = normals.map(normal => (multiplyMatrices([[...normal, 0]], inverse)[0]).slice(0, -1));
 		const zBuffer = Array.from({length: canvas.width},
 			() => Array.from({length: canvas.height}, () => Number.NEGATIVE_INFINITY));
 		lightDirection = normalizeVector(lightDirection)
 		for (let faceData of faces)
 		{
 			const face = faceData.map(vertexData => ({
-				coordinates: vertexes[vertexData.vertexIndex],
+				coordinates: transformedVertexes[vertexData.vertexIndex],
 				textureCoordinates: textureCoordinates[vertexData.textureCoordinatesIndex],
-				normal: normals[vertexData.vertexIndex]
+				normal: transformedNormals[vertexData.vertexIndex]
 			}));
 			//TODO: correct view based back-face culling
 			RenderTriangle_Box(
 				PutPixel,
-				...face.map(transform),
+				...face,
 				zBuffer,
 				textureData,
 				lightDirection
@@ -165,18 +160,18 @@ window.onload = async _ => {
 		}
 	}
 
-	const cartesianToBarycentric = (p, a, b, c) => {
+	const cartesianToBarycentric3d = (p, a, b, c) => {
 		const pointsToVector = (a, b) => b.map((value, index) => value - a[index]);
 		const [abx, aby] = pointsToVector(a, b);
 		const [acx, acy] = pointsToVector(a, c);
 		const [pax, pay] = pointsToVector(p, a);
-		const [x, y, z] = crossProduct([abx, acx, pax], [aby, acy, pay]);
+		const [x, y, z] = crossProduct3d([abx, acx, pax], [aby, acy, pay]);
 		const u = x / z;
 		const v = y / z;
 		return [1 - u - v, u, v];
 	}
 	const pointsToVector = (a, b) => b.map((value, index) => value - a[index]);
-	const crossProduct = (a, b) => [
+	const crossProduct3d = (a, b) => [
 		a[1] * b[2] - a[2] * b[1],
 		a[2] * b[0] - a[0] * b[2],
 		a[0] * b[1] - a[1] * b[0],
@@ -229,6 +224,8 @@ window.onload = async _ => {
 	textureCanvas.height = image.height
 	textureCtx.drawImage(image, 0, 0);
 	const textureData = textureCtx.getImageData(0, 0, textureCanvas.width, textureCanvas.height);
+	console.time("Rendering");
 	RenderModel(vertexes, faces, textureCoordinates, normals, textureData, [1, 0, 0]);
+	console.timeEnd("Rendering");
 	ctx.putImageData(imageData, 0, 0);
 }
